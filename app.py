@@ -9,12 +9,12 @@ st.title("🏆 Ranking Inteligente de Ofertas Primárias (Concorrentes)")
 st.markdown("Este painel classifica as ofertas de FIIs de concorrentes capturadas nos últimos 7 dias, priorizando P/VP abaixo de 1.")
 
 # Verifica se o arquivo de ranking gerado pela IA existe
-if not os.path.exists("ranking_ofertas.json"):
-    st.warning("O arquivo de dados 'ranking_ofertas.json' não foi encontrado.")
+if not os.path.exists("dados_finais.json"):
+    st.warning("O arquivo de dados 'dados_finais.json' não foi encontrado.")
     st.info("Por favor, execute o script 'python3 gerar_ranking.py' no terminal primeiro para construir a base de dados do ranking.")
 else:
     # Carrega os dados processados em lote pelo backend
-    with open("ranking_ofertas.json", "r", encoding="utf-8") as f:
+    with open("dados_finais.json", "r", encoding="utf-8") as f:
         dados_ranking = json.load(f)
         
     # Converte para DataFrame para manipulação visual
@@ -48,17 +48,17 @@ else:
     # Exibe a tabela do ranking completo ordenada pelo Score da IA
     st.subheader("📊 Classificação Completa")
     
-    colunas = ['score_ranking', 'pvp', 'preco_emissao', 'valor_patrimonial_cota', 'fundo', 'coordenador', 'volume', 'yield_alvo', 'taxa_distribuicao']
+    colunas = ['score_ranking', 'pvp', 'preco_emissao', 'valor_patrimonial_cota', 'fundo', 'segmento', 'coordenador', 'volume', 'yield_alvo']
     nomes_colunas = {
         'score_ranking': 'Score',
         'pvp': 'P/VP',
         'preco_emissao': 'Preço de Emissão',
         'valor_patrimonial_cota': 'VP/Cota',
         'fundo': 'Fundo Imobiliário',
+        'segmento': 'Segmento',
         'coordenador': 'Coordenador Líder',
         'volume': 'Volume (R$)',
         'yield_alvo': 'Yield Alvo',
-        'taxa_distribuicao': 'Taxa de Distribuição',
     }
     colunas_existentes = [coluna for coluna in colunas if coluna in df.columns]
     df_tabela = df[colunas_existentes].rename(columns=nomes_colunas)
@@ -76,7 +76,11 @@ else:
     st.markdown(f"**P/VP:** {detalhes.get('pvp', 'Não encontrado')}")
     st.markdown(f"**Preço de Emissão:** {detalhes.get('preco_emissao', 'Não encontrado')}")
     st.markdown(f"**VP/Cota:** {detalhes.get('valor_patrimonial_cota', 'Não encontrado')}")
-    st.markdown(f"**Taxa de Distribuição:** {detalhes.get('taxa_distribuicao', 'Não encontrado')}")
+    st.markdown(f"**Segmento:** {detalhes.get('segmento', 'Não encontrado')}")
     st.markdown(f"**Yield Alvo:** {detalhes.get('yield_alvo', 'Não encontrado')}")
     st.markdown(f"**Resumo da Estratégia Extraído pela IA:** {detalhes.get('estrategia', 'Sem informações suficientes.')}")
-    st.markdown(f"**Fonte de Análise:** [Abrir Link Original Monitorado]({detalhes['url_prospecto']})")
+    url_fonte = detalhes.get('url_fonte', 'Não disponível')
+    if url_fonte and url_fonte not in ('Não disponível', 'Fora da triagem'):
+        st.markdown(f"**Fonte de Análise:** [Abrir Link Original Monitorado]({url_fonte})")
+    else:
+        st.markdown(f"**Fonte de Análise:** {url_fonte}")

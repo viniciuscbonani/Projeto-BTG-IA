@@ -1,2 +1,7 @@
 pandas
 requests
+streamlit
+playwright
+pydantic
+langchain-groq
+python-dotenv

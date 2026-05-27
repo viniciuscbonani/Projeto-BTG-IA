@@ -8,7 +8,7 @@ import os
 import json
 import requests
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 
@@ -18,12 +18,27 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # ─── 1. Schema de Saída (O Contrato de Dados) ─────────────────────────────────
 class MetricasFII(BaseModel):
-    """Métricas financeiras extraídas do documento ou portal de um FII."""
-    pvp_numerico: float | None = Field(default=None, description="Valor numérico exato do P/VP (ex: 0.95, 1.02)")
-    preco_emissao: str | None = Field(default=None, description="Preço de emissão da cota na oferta")
-    valor_patrimonial_cota: str | None = Field(default=None, description="Valor patrimonial por cota")
+    """Inteligência QUALITATIVA do FII (números ficam com a CVM, fonte determinística).
+
+    Schema enxuto de propósito: só campos string. Cada campo numérico extra é
+    (a) uma chance de mismatch de tipo (LLM oscila entre devolver número ou string)
+    e (b) uma chance de alucinação (atribuir R$/P/VP do fundo errado ao certo).
+    """
+    segmento: str | None = Field(default=None, description="Segmento do FII: logístico, lajes corporativas, recebíveis, shoppings, residencial, híbrido, etc.")
     dividend_yield_alvo: str | None = Field(default=None, description="Dividend Yield alvo ou histórico (ex: 11% a.a.)")
-    resumo_estrategia: str | None = Field(default=None, description="Breve resumo da estratégia do fundo")
+    resumo_estrategia: str | None = Field(default=None, description="Breve resumo da estratégia do fundo em 1-2 frases")
+
+    @field_validator("segmento", "dividend_yield_alvo", "resumo_estrategia", mode="before")
+    @classmethod
+    def _coerce_null_string_to_none(cls, v):
+        # Groq às vezes devolve a STRING literal "null"/"none"/"n/a" em vez do JSON null.
+        # Normaliza isso aqui para que o caller possa usar `m.segmento or "..."` com segurança.
+        if v is None:
+            return None
+        s = str(v).strip().lower()
+        if s in ("", "null", "none", "n/a", "nao disponivel", "não disponível"):
+            return None
+        return v
 
 # ─── 2. Ingestão Web (Leitor Jina) ────────────────────────────────────────────
 def fetch_page(url: str) -> str:
@@ -52,15 +67,22 @@ def extract_from_text(content: str, source_url: str) -> MetricasFII:
     # Limitamos o texto a 6000 caracteres para não estourar os Tokens Por Minuto (TPM)
     texto_limpo = content[:6000]
 
-    prompt = f"""Você é um analista do BTG Pactual. Extraia os dados da oferta imobiliária do texto abaixo.
-    Priorize encontrar o valor do P/VP (Preço sobre Valor Patrimonial).
-    Se não achar alguma informação no texto fornecido, retorne null. Não invente dados.
-    
+    prompt = f"""Você é um analista do BTG Pactual lendo uma notícia sobre uma oferta de FII.
+    Extraia APENAS três informações qualitativas:
+      1. segmento: logístico, lajes corporativas, recebíveis/CRI, shoppings, residencial, híbrido, etc.
+      2. dividend_yield_alvo: yield alvo ou histórico (ex: "11% a.a.", "CDI + 2%")
+      3. resumo_estrategia: 1-2 frases sobre a estratégia do fundo
+
+    REGRAS CRÍTICAS:
+    - Se a notícia for sobre um fundo DIFERENTE (ticker/nome diferente do que você está analisando), retorne TUDO null.
+    - Se a informação não estiver clara no texto, retorne null. NÃO INVENTE.
+    - Não preencha dados de outro FII só porque a notícia mencionou ele de passagem.
+
     Texto da fonte:
     ---
     {texto_limpo}
     ---
-    
+
     URL da fonte original: {source_url}
     """
 
